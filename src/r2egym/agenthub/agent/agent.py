@@ -62,12 +62,14 @@ class Agent:
         else:
             self.logger = logger
         self.llm_name = args.llm_name
-        self.llm_base_url = (
-            # "http://localhost:8000/v1"
-            "http://localhost:8000/v1"
-            if ("openai/" in self.llm_name) or ("hosted_vllm" in self.llm_name)
-            else None
-        )
+        # self.llm_base_url = (
+        #     # "http://localhost:8000/v1"
+        #     "http://localhost:8000/v1"
+        #     if ("openai/" in self.llm_name) or ("hosted_vllm" in self.llm_name)
+        #     else None
+        # )
+        self.llm_base_url = "https://api.deepseek.com"
+        self.llm_api_key = 'sk-8b2e0e39b7a642ca819c752c95199f70'
         self.system_prompt_template = args.system_prompt
         self.instance_prompt_template = args.instance_prompt
         self.command_files = args.command_files
@@ -284,6 +286,13 @@ class Agent:
                 }
                 if tools:
                     kwargs = {}
+                print('$'*1000)
+                print(self.llm_base_url)
+                print(self.llm_api_key)
+                print(self.llm_name)
+                print(tools)
+                print(messages_)
+                print('$'*1000)
                 response = litellm.completion(
                     model=self.llm_name,
                     tools=tools,
@@ -291,6 +300,7 @@ class Agent:
                     timeout=self.llm_timeout,
                     temperature=temperature,
                     api_base=self.llm_base_url,
+                    api_key=self.llm_api_key,
                     # max_tokens=3000,
                     **kwargs,
                 )

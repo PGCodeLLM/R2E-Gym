@@ -117,11 +117,11 @@ def runagent(
     # set agent args
     if use_fn_calling:
         agent_args = AgentArgs.from_yaml(
-            Path("./src/r2egym/agenthub/config/edit_fn_calling.yaml")
+            Path("./agenthub/config/edit_fn_calling.yaml")
         )
     else:
         agent_args = AgentArgs.from_yaml(
-            Path("./src/r2egym/agenthub/config/edit_non_fn_calling.yaml")
+            Path("./agenthub/config/edit_non_fn_calling.yaml")
         )
     agent_args.llm_name = llm_name
 

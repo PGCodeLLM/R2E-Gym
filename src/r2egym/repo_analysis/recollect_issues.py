@@ -13,9 +13,28 @@ from r2egym.repo_analysis.validate_docker_and_hf import DatasetRow
 def get_files():
     return glob.glob("repo_datasets/*.jsonl")
 
+import os
+os.environ['DEEPSEEK_API_KEY'] = 'sk-8b2e0e39b7a642ca819c752c95199f70'
+# client = OpenAI()
+# tokenizer = tiktoken.encoding_for_model("o1-mini")
 
-client = OpenAI()
-tokenizer = tiktoken.encoding_for_model("o1-mini")
+
+from deepseek import Client
+client = Client(api_key="sk-8b2e0e39b7a642ca819c752c95199f70", base_url="https://api.deepseek.com")
+tokenizer = tiktoken.encoding_for_model("deepseek-chat")
+
+# client = OpenAI(api_key="sk-8b2e0e39b7a642ca819c752c95199f70", base_url="https://api.deepseek.com")
+# tokenizer = tiktoken.encoding_for_model("deepseek/deepseek-chat") 
+
+def run_deepseek_r1_zero(prompt):
+    print('*'*1000)
+    response = client.chat.completions.create(
+        messages=prompt,
+        model="deepseek-chat", 
+        provider="deepseek", 
+        max_completion_tokens=12000, 
+    )
+    return response.choices[0].message.content
 
 
 def run_o1mini(prompt):
@@ -61,7 +80,8 @@ def main():
 
         with Pool(50) as p:
             completions = list(
-                tqdm.tqdm(p.imap(run_o1mini, prompts), total=len(prompts))
+                # tqdm.tqdm(p.imap(run_o1mini, prompts), total=len(prompts))
+                tqdm.tqdm(p.imap(run_deepseek_r1_zero, prompts), total=len(prompts))
             )
 
         for i, completion in enumerate(completions):
@@ -94,7 +114,8 @@ def main_test():
 
         with Pool(50) as p:
             completions = list(
-                tqdm.tqdm(p.imap(run_o1mini, prompts), total=len(prompts))
+                # tqdm.tqdm(p.imap(run_o1mini, prompts), total=len(prompts))
+                tqdm.tqdm(p.imap(run_deepseek_r1_zero, prompts), total=len(prompts))
             )
 
         for i, completion in enumerate(completions):
