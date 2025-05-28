@@ -57,7 +57,7 @@ def get_docker_images(repo_name) -> List[str]:
 # editagent Functions
 ##############################################################################
 def run_agent_with_restarts(
-    agent, env, max_steps=40, num_restarts=1, temperature=0.0, max_steps_absolute=50, use_fn_calling: bool = True,
+    agent, env, max_steps=40, num_restarts=1, temperature=0.0, top_p=0.0, presence_penalty=0.0, max_steps_absolute=50, use_fn_calling: bool = True, top_p: float = 0.8, presence_penalty: float = 1.5
 ):
     steps_per_agent = max_steps // num_restarts
     logger.warning(f"running {steps_per_agent} steps per agent")
@@ -70,6 +70,8 @@ def run_agent_with_restarts(
             temperature=temperature,
             max_steps_absolute=max_steps_absolute,
             use_fn_calling=use_fn_calling,
+            top_p=top_p,
+            presence_penalty=presence_penalty,
         )
         # remove reproduce.py
         # env.runtime.run('rm reproduce_issue.py')
@@ -84,7 +86,10 @@ def runagent(
     max_steps_absolute=50,
     llm_name="gpt-4o",
     temperature=0,
+    top_p=0,
+    presence_penalty=0,
     use_fn_calling: bool = True,
+    llm_base_url: Optional[str] = None,
 ) -> Optional[str]:
     """
     Runs the editagent agent on a specified Docker image.
@@ -124,6 +129,8 @@ def runagent(
             Path("./agenthub/config/edit_non_fn_calling.yaml")
         )
     agent_args.llm_name = llm_name
+    if llm_base_url:
+        agent_args.llm_base_url = llm_base_url
 
     # Initialize the agent
     agent = Agent(name="EditAgent", args=agent_args, logger=logger)
@@ -136,6 +143,8 @@ def runagent(
             max_steps=max_steps,
             num_restarts=num_restarts,
             temperature=temperature,
+            top_p=top_p,
+            presence_penalty=presence_penalty,
             max_steps_absolute=max_steps_absolute,
             use_fn_calling=use_fn_calling,
         )
@@ -177,7 +186,10 @@ def runagent_multiple(
     use_existing: bool = True,
     skip_existing: bool = False,
     temperature: float = 0,
+    top_p: float = 0.8,
+    presence_penalty: float = 1.5,
     use_fn_calling: bool = True,
+    llm_base_url: Optional[str] = None,
 ):
     """
     Runs the editagent agent on the first k Docker images.
@@ -271,7 +283,10 @@ def runagent_multiple(
                 max_steps_absolute=max_steps_absolute,
                 llm_name=llm_name,
                 temperature=temperature,
+                top_p=top_p,
+                presence_penalty=presence_penalty,
                 use_fn_calling=use_fn_calling,
+                llm_base_url=llm_base_url
             ): ds_entry[
                 "docker_image"
             ]  # <-- store the docker_image from ds_entry here

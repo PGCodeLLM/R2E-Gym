@@ -25,6 +25,7 @@ class TrajectoryStep(BaseModel):
     observation: str
     done: bool
     info: dict
+    reasoning: str
 
     ## tokens
     token_usage_prompt: int
@@ -497,11 +498,13 @@ class Trajectory(BaseModel):
         token_counts = {
             "action": [],
             "thought": [],
+            "reasoning": [],
             "observation": [],
         }
         for step in self.trajectory_steps:
             token_counts["action"].append(token_count_fn(step.action))
             token_counts["thought"].append(token_count_fn(step.thought))
+            token_counts["reasoning"].append(token_count_fn(step.reasoning))
             token_counts["observation"].append(token_count_fn(step.observation))
         return token_counts
 

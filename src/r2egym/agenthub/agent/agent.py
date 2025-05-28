@@ -68,7 +68,9 @@ class Agent:
         #     if ("openai/" in self.llm_name) or ("hosted_vllm" in self.llm_name)
         #     else None
         # )
-        self.llm_base_url = "https://api.deepseek.com"
+        # self.llm_base_url = "http://10.10.100.19:8000/v1"
+        # self.llm_api_key = 'sk-mySuperDuperSecretKeyWithSoManyLettersAndNum2er3'
+        self.llm_base_url = getattr(args, "llm_base_url", "https://api.deepseek.com")
         self.llm_api_key = 'sk-8b2e0e39b7a642ca819c752c95199f70'
         self.system_prompt_template = args.system_prompt
         self.instance_prompt_template = args.instance_prompt
@@ -240,7 +242,7 @@ class Agent:
         return token_count
 
     def model_query(
-        self, messages: List[Dict[str, str]], temperature: float = 0
+        self, messages: List[Dict[str, str]], temperature: float = 0, top_p: float = 0, presence_penalty: float = 0
     ) -> Dict[str, Any]:
         """Query the LLM with the messages and measure execution time."""
         response = None
@@ -293,17 +295,36 @@ class Agent:
                 print(tools)
                 print(messages_)
                 print('$'*1000)
-                response = litellm.completion(
-                    model=self.llm_name,
-                    tools=tools,
-                    messages=messages_,
-                    timeout=self.llm_timeout,
-                    temperature=temperature,
-                    api_base=self.llm_base_url,
-                    api_key=self.llm_api_key,
-                    # max_tokens=3000,
-                    **kwargs,
-                )
+                if self.llm_name == "Qwen/Qwen3-235B-A22B":
+                    response = litellm.completion(
+                        model=f"hosted_vllm/{self.llm_name}",
+                        tools=tools,
+                        messages=messages_,
+                        timeout=self.llm_timeout,
+                        temperature=temperature,
+                        top_p=top_p,
+                        presence_penalty=presence_penalty,
+                        extra_body={
+                            "top_k": 20,
+                            "min_p": 0,
+                        },
+                        api_base=self.llm_base_url,
+                        api_key="sk-mySuperDuperSecretKeyWithSoManyLettersAndNum2er3",
+                        # max_tokens=3000,
+                        **kwargs,
+                    )
+                else:
+                    response = litellm.completion(
+                        model=self.llm_name,
+                        tools=tools,
+                        messages=messages_,
+                        timeout=self.llm_timeout,
+                        temperature=temperature,
+                        api_base=self.llm_base_url,
+                        api_key=self.llm_api_key,
+                        # max_tokens=3000,
+                        **kwargs,
+                    )
                 self.logger.warning(f"Querying LLM complete")
                 break
             except Exception as e:
@@ -377,6 +398,8 @@ class Agent:
         max_llm_time: int = 120,  # 2 mins per LLM timeout (note this is per query exlcuding retries | not enforcing hard limit since llm might hit rate limits etc)
         # temperature
         temperature=0,
+        top_p=0,
+        presence_penalty=0,
         # additional metadata e.g. for hints / additional inputs etc
         metadata: Optional[Dict[str, Any]] = {},
     ):
@@ -453,7 +476,7 @@ class Agent:
 
             # Query the LLM
             messages = copy.deepcopy(self.history)
-            response, llm_exec_time = self.model_query(messages, temperature)
+            response, llm_exec_time = self.model_query(messages, temperature, top_p, presence_penalty)
 
             # Log total tokens in the response
             if hasattr(response, "usage"):
@@ -478,6 +501,8 @@ class Agent:
             # Parse the LLM response to get 'thought' and 'action'
             self.response = response  # for debugging
             assistant_message = response.choices[0].message.content
+            assistant_reasoning = getattr(response.choices[0].message, "reasoning_content", None)
+
             self.logger.info(f"Assistant's message:\n{assistant_message}\n")
 
             if self.use_fn_calling:
@@ -534,7 +559,7 @@ class Agent:
             else:
                 self.logger.warning("logging fn response as a user message")
                 assistant_message = f"{thought}\n\n{action.to_xml_string()}"
-                self.history.append({"role": "assistant", "content": assistant_message})
+                self.history.append({"role": "assistant", "content": assistant_message, "reasoning": assistant_reasoning})
                 self.history.append({"role": "user", "content": str(obs)})
 
             # Log the thought, action, and observation
@@ -584,6 +609,7 @@ class Agent:
                 # key parts
                 step_idx=step_count - 1,
                 thought=thought,
+                reasoning=assistant_reasoning,
                 action=action.to_xml_string(),
                 observation=str(obs),
                 done=done,
