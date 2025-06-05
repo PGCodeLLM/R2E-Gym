@@ -10,6 +10,7 @@ from datetime import datetime
 import json
 import concurrent.futures
 import threading
+import multiprocessing
 
 from r2egym.agenthub.runtime.docker import DockerRuntime
 from r2egym.agenthub.environment.env import EnvArgs, RepoEnv
@@ -57,7 +58,7 @@ def get_docker_images(repo_name) -> List[str]:
 # editagent Functions
 ##############################################################################
 def run_agent_with_restarts(
-    agent, env, max_steps=40, num_restarts=1, temperature=0.0, top_p=0.0, presence_penalty=0.0, max_steps_absolute=50, use_fn_calling: bool = True, top_p: float = 0.8, presence_penalty: float = 1.5
+    agent, env, max_steps=40, num_restarts=1, temperature=0.0, top_p=0.0, presence_penalty=0.0, max_steps_absolute=50, use_fn_calling: bool = True
 ):
     steps_per_agent = max_steps // num_restarts
     logger.warning(f"running {steps_per_agent} steps per agent")
@@ -71,7 +72,7 @@ def run_agent_with_restarts(
             max_steps_absolute=max_steps_absolute,
             use_fn_calling=use_fn_calling,
             top_p=top_p,
-            presence_penalty=presence_penalty,
+            presence_penalty=presence_penalty
         )
         # remove reproduce.py
         # env.runtime.run('rm reproduce_issue.py')
@@ -88,8 +89,9 @@ def runagent(
     temperature=0,
     top_p=0,
     presence_penalty=0,
-    use_fn_calling: bool = True,
+    use_fn_calling: bool = False,
     llm_base_url: Optional[str] = None,
+    sem = None
 ) -> Optional[str]:
     """
     Runs the editagent agent on a specified Docker image.
@@ -133,7 +135,7 @@ def runagent(
         agent_args.llm_base_url = llm_base_url
 
     # Initialize the agent
-    agent = Agent(name="EditAgent", args=agent_args, logger=logger)
+    agent = Agent(name="EditAgent", args=agent_args, logger=logger, sem=sem)
 
     # run agent editagent
     try:
@@ -183,13 +185,14 @@ def runagent_multiple(
     max_steps_absolute=50,
     max_workers: Optional[int] = None,
     llm_name="gpt-4o",
-    use_existing: bool = True,
-    skip_existing: bool = False,
+    use_existing: bool = False,
+    skip_existing: bool = True,
     temperature: float = 0,
     top_p: float = 0.8,
     presence_penalty: float = 1.5,
     use_fn_calling: bool = True,
-    llm_base_url: Optional[str] = None,
+    llm_base_urls: Optional[str] = None,
+    max_semaphores: Optional[int] = 1
 ):
     """
     Runs the editagent agent on the first k Docker images.
@@ -207,11 +210,11 @@ def runagent_multiple(
     logger.info(f"{len(ds)}, {k}, {start_idx}")
     # shuffle the dataset
     ds = ds.shuffle(seed=42)
-
     # get selected idxs
     selected_idx = range(start_idx, start_idx + k)
     ds_selected = [ds[i] for i in selected_idx]
-
+    llm_base_urls = llm_base_urls.split(',')
+    num_base = len(llm_base_urls)
     # print ds_selected stats
     logger.info(
         f"Dataset: {dataset}, Split: {split}, Num_total: {len(ds)}, Start Index: {start_idx}, k: {k}"
@@ -269,45 +272,49 @@ def runagent_multiple(
     logger.info(
         f"Starting editagent on {len(ds_selected)} Docker images after filtering."
     )
-
     # with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all tasks to the executor using keyword arguments
-        future_to_image = {
-            executor.submit(
-                runagent,
-                ds=ds_entry,
-                exp_name=exp_name,
-                max_steps=max_steps,
-                num_restarts=num_restarts,
-                max_steps_absolute=max_steps_absolute,
-                llm_name=llm_name,
-                temperature=temperature,
-                top_p=top_p,
-                presence_penalty=presence_penalty,
-                use_fn_calling=use_fn_calling,
-                llm_base_url=llm_base_url
-            ): ds_entry[
-                "docker_image"
-            ]  # <-- store the docker_image from ds_entry here
-            for ds_entry in ds_selected
-        }
+    with multiprocessing.Manager() as manager:
+        semaphores = {}
+        for url in llm_base_urls:
+            semaphores[url] = manager.Semaphore(max_semaphores)
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks to the executor using keyword arguments
+            future_to_image = {
+                executor.submit(
+                    runagent,
+                    ds=ds_entry,
+                    exp_name=exp_name,
+                    max_steps=max_steps,
+                    num_restarts=num_restarts,
+                    max_steps_absolute=max_steps_absolute,
+                    llm_name=llm_name,
+                    temperature=temperature,
+                    top_p=top_p,
+                    presence_penalty=presence_penalty,
+                    use_fn_calling=use_fn_calling,
+                    llm_base_url=llm_base_urls[idx%num_base],
+                    sem=semaphores[llm_base_urls[idx%num_base]]
+                ): ds_entry[
+                    "docker_image"
+                ]  # <-- store the docker_image from ds_entry here
+                for idx,ds_entry in enumerate(ds_selected)
+            }
 
-        with open(jsonl_file, "a") as f:
-            for future in concurrent.futures.as_completed(future_to_image):
-                docker_image = future_to_image[
-                    future
-                ]  # <-- retrieve that stored docker_image
-                try:
-                    result = future.result()
-                    if result is not None:
-                        with file_lock:
-                            f.write(result + "\n")
-                except Exception as e:
-                    # Use docker_image from above when logging
-                    logger.error(f"Exception for Docker image {docker_image}: {e}")
+            with open(jsonl_file, "a") as f:
+                for future in concurrent.futures.as_completed(future_to_image):
+                    docker_image = future_to_image[
+                        future
+                    ]  # <-- retrieve that stored docker_image
+                    try:
+                        result = future.result()
+                        if result is not None:
+                            with file_lock:
+                                f.write(result + "\n")
+                    except Exception as e:
+                        # Use docker_image from above when logging
+                        logger.error(f"Exception for Docker image {docker_image}: {e}")
 
-    logger.info(f"editagent completed on {len(ds_selected)} Docker images.")
+        logger.info(f"editagent completed on {len(ds_selected)} Docker images.")
 
 
 if __name__ == "__main__":
