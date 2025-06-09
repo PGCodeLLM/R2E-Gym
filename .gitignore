@@ -9,7 +9,6 @@ datasets*
 hf_datasets*
 final_dockers.jsonl
 run_logs
-traj/
 traj2/
 finaltraj/
 qwentraj/
