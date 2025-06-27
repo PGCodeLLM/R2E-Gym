@@ -1,4 +1,4 @@
-#!/root/.venv/bin/python
+#!/usr/local/bin/python
 
 """
 Description: Custom editing tool for viewing, creating and editing files

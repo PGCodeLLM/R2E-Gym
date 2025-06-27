@@ -1,4 +1,4 @@
-#!/root/.venv/bin/python
+#!/usr/local/bin/python
 """
 Description: A simple finish tool with a "submit" command.
 

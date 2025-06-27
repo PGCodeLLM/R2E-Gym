@@ -8,6 +8,7 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel
+import multiprocessing
 
 import litellm
 from openai import OpenAI
@@ -53,7 +54,7 @@ class AgentArgs:
 class Agent:
     """Agent handles the behavior of the model and how it interacts with the environment."""
 
-    def __init__(self, name: str, args: AgentArgs, logger=None):
+    def __init__(self, name: str, args: AgentArgs, logger=None, sem = None):
         self.name = name
         self.args = args
         # self.trajectory_steps: List[TrajectoryStep] = []
@@ -69,9 +70,8 @@ class Agent:
         #     else None
         # )
         # self.llm_base_url = "http://10.10.100.19:8000/v1"
-        # self.llm_api_key = 'sk-mySuperDuperSecretKeyWithSoManyLettersAndNum2er3'
         self.llm_base_url = getattr(args, "llm_base_url", "https://api.deepseek.com")
-        self.llm_api_key = 'sk-8b2e0e39b7a642ca819c752c95199f70'
+        # self.llm_api_key = ""
         self.system_prompt_template = args.system_prompt
         self.instance_prompt_template = args.instance_prompt
         self.command_files = args.command_files
@@ -79,7 +79,7 @@ class Agent:
         self.logger.info(f"Initialized Agent: {name} with LLM: {args.llm_name}")
         self.max_retries = self.other_args.get("max_retries", 3)
         self.llm_timeout = self.other_args.get("timeout", 120)
-
+        self.sem = sem
     def prepare_system_message(
         self, problem_statement: str, structure: str, command_docs: str, demo: str
     ) -> str:
@@ -281,59 +281,77 @@ class Agent:
 
         # query the model with retries
         while retries < self.max_retries:
-            try:
-                kwargs = {
-                    "tool_choice": "none",
-                    "function_call": None,
-                }
-                if tools:
-                    kwargs = {}
-                print('$'*1000)
-                print(self.llm_base_url)
-                print(self.llm_api_key)
-                print(self.llm_name)
-                print(tools)
-                print(messages_)
-                print('$'*1000)
-                if self.llm_name == "Qwen/Qwen3-235B-A22B":
-                    response = litellm.completion(
-                        model=f"hosted_vllm/{self.llm_name}",
-                        tools=tools,
-                        messages=messages_,
-                        timeout=self.llm_timeout,
-                        temperature=temperature,
-                        top_p=top_p,
-                        presence_penalty=presence_penalty,
-                        extra_body={
-                            "top_k": 20,
-                            "min_p": 0,
-                        },
-                        api_base=self.llm_base_url,
-                        api_key="sk-mySuperDuperSecretKeyWithSoManyLettersAndNum2er3",
-                        # max_tokens=3000,
-                        **kwargs,
-                    )
-                else:
-                    response = litellm.completion(
-                        model=self.llm_name,
-                        tools=tools,
-                        messages=messages_,
-                        timeout=self.llm_timeout,
-                        temperature=temperature,
-                        api_base=self.llm_base_url,
-                        api_key=self.llm_api_key,
-                        # max_tokens=3000,
-                        **kwargs,
-                    )
-                self.logger.warning(f"Querying LLM complete")
-                break
-            except Exception as e:
-                self.logger.error(f"LLM query failed @ {retries}: {e}")
-                retries += 1
-                if "RateLimitError" in str(e):
-                    time.sleep(60)
-                if retries >= self.max_retries:
-                    raise e
+            with self.sem:
+                try:
+                    kwargs = {
+                        "tool_choice": "none",
+                        "function_call": None,
+                    }
+                    if tools:
+                        kwargs = {}
+                    print('$'*1000)
+                    print(self.llm_base_url)
+                    print(self.llm_api_key)
+                    print(self.llm_name)
+                    print(tools)
+                    print(messages_)
+                    print('$'*1000)
+                    if self.llm_name == "Qwen/Qwen3-235B-A22B":
+                        response = litellm.completion(
+                            model=f"hosted_vllm/{self.llm_name}",
+                            tools=tools,
+                            messages=messages_,
+                            timeout=self.llm_timeout,
+                            temperature=temperature,
+                            top_p=top_p,
+                            presence_penalty=presence_penalty,
+                            extra_body={
+                                "top_k": 20,
+                                "min_p": 0,
+                            },
+                            api_base=self.llm_base_url,
+                            api_key=self.llm_api_key,
+                            # max_tokens=3000,
+                            **kwargs,
+                        )
+                    elif self.llm_name.startswith("anthropic/"):
+                        print("Misanthropic model detected")
+                        response = litellm.completion(
+                            model=f"{self.llm_name}",
+                            tools=tools,
+                            messages=messages_,
+                            timeout=self.llm_timeout,
+                            temperature=temperature,
+                            thinking={
+                                "type": "enabled",
+                                "budget_tokens": 10000
+                            },
+                            api_base=self.llm_base_url,
+                            api_key=self.llm_api_key,
+                            # max_tokens=3000,
+                            **kwargs,
+                        )
+                    else:
+                        response = litellm.completion(
+                            model=self.llm_name,
+                            tools=tools,
+                            messages=messages_,
+                            timeout=self.llm_timeout,
+                            temperature=temperature,
+                            api_base=self.llm_base_url,
+                            api_key=self.llm_api_key,
+                            # max_tokens=3000,
+                            **kwargs,
+                        )
+                    self.logger.warning(f"Querying LLM complete")
+                    break
+                except Exception as e:
+                    self.logger.error(f"LLM query failed @ {retries}: {e}")
+                    retries += 1
+                    if "RateLimitError" in str(e):
+                        time.sleep(60)
+                    if retries >= self.max_retries:
+                        raise e
 
         # End timer, calculate total execution time, and include in response
         exec_time = time.time() - start_time
@@ -423,6 +441,7 @@ class Agent:
         # Reset the environment and the agent
         env.reset()
         env.add_commands(self.command_files)
+        # print(f":333333333333333333toad:\n {env.runtime.run('ls -l /usr/local/bin')[0]} \n for container name {env.runtime.container.name}")
         self.reset()
 
         # Prepare problem_statement and structure from the environment

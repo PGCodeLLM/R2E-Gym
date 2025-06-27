@@ -236,10 +236,10 @@ def upload_to_mongo(message_dict: dict):
         {"problem_statement_hash": message_dict["problem_statement_hash"]}, message_dict, upsert=True
     )
 
-input_file_name = "NON_FN_r2egym-training-trajectories_qwen.jsonl"
+input_file_name = "TRACEGEN.jsonl"
 output_file_name = "qwen_traces2.jsonl"
 insert_jsonl_to_mongodb(
-    file_path="NON_FN_r2egym-training-trajectories_qwen.jsonl",
+    file_path="TRACEGEN.jsonl",
     mongo_uri = "mongodb://bmc:GwvDjDyUnm1GpRT6sMAq7rUo44EDmzuv02Tn9n5mmqvZyn3Zvsee4ozdCGFN57qXRqKEYethBPQfErCGE4oAr3feVuqjpcBuF2em@10.10.100.43:26969/",
     db_name="r2e_traces",
     collection_name="qwen_traces"

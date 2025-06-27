@@ -1,4 +1,4 @@
-#!/root/.venv/bin/python
+#!/usr/local/bin/python
 
 # @yaml
 # signature: search_dir <search_term> [<dir>]

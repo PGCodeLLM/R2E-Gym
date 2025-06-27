@@ -92,6 +92,8 @@ class DockerRuntime(ExecutionEnvironment):
         )
         self.swebench_verified = "swebench" in self.docker_image
         if self.swebench_verified:
+            raise
+            #TO-DO: kill me
             # also create a test spec for swebench verified dockers (useful for grading)
             self.test_spec = make_test_spec(self.ds)
 
@@ -100,7 +102,7 @@ class DockerRuntime(ExecutionEnvironment):
         self.alt_path = alt_path
         self.command = command
         self.repo_name = (
-            self.ds["repo"] if self.swebench_verified else self.ds["repo_name"]
+            self.ds["repo"]
         )
         self.commit_json = (
             self.ds["parsed_commit"]
@@ -118,56 +120,125 @@ class DockerRuntime(ExecutionEnvironment):
         self.client = docker.from_env()
 
         # Start the container
-        self.container_name = self._get_container_name(self.docker_image)
+        # self.container_name = self._get_container_name(self.docker_image)
+        self.container_name = self.docker_image
+        print("Running start container...")
         self.start_container(
-            self.docker_image, command, self.container_name, **docker_kwargs
+            self, self.docker_image, command, self.container_name, **docker_kwargs
         )
 
         # Initialize the environment
+        print("painpeko")
+        print(self.run("find / -maxdepth 1 -type d -printf '%f\n'", workdir="/"))
+        print("voivode")
         self.setup_env()
         self.logger.info("Docker environment initialized")
         self.logger.info("repo name: %s", self.repo_name)
         self.logger.info("Docker image: %s", self.docker_image)
         self.logger.info("Container ID: %s", self.container.id)
-
     @staticmethod
-    def _get_container_name(image_name: str) -> str:
-        """Return name of container"""
-        process_id = str(os.getpid())
-        current_time = str(datetime.datetime.now())
-        unique_string = current_time + process_id
-        hash_object = hashlib.sha256(unique_string.encode())
-        image_name_sanitized = image_name.replace("/", "-")
-        image_name_sanitized = image_name_sanitized.replace(":", "-")
-        return f"{image_name_sanitized}-{hash_object.hexdigest()[:10]}"
+    # def _get_container_name(image_name: str) -> str:
+    #     """Return name of container"""
+    #     process_id = str(os.getpid())
+    #     current_time = str(datetime.datetime.now())
+    #     unique_string = current_time + process_id
+    #     hash_object = hashlib.sha256(unique_string.encode())
+    #     image_name_sanitized = image_name.replace("/", "-")
+    #     image_name_sanitized = image_name_sanitized.replace(":", "-")
+    #     return f"{image_name_sanitized}-{hash_object.hexdigest()[:10]}"
+
+    # def start_container(
+    #     self, docker_image: str, command: str, ctr_name: str, **docker_kwargs
+    # ):
+    #     # Start or reuse a container
+    #     try:
+    #         containers = self.client.containers.list(
+    #             all=True, filters={"name": ctr_name}
+    #         )
+    #         print(f"There are {len(containers)} containers!")
+    #         if containers:
+    #             self.container = containers[0]
+    #             if self.container.status != "running":
+    #                 self.container.start()
+    #         else:
+    #             self.container = self.client.containers.run(
+    #                 docker_image,
+    #                 command,
+    #                 name=ctr_name,
+    #                 detach=True,
+    #                 tty=True,
+    #                 stdin_open=True,
+    #                 # environment={"PATH": "/commands"},
+    #                 **docker_kwargs,
+    #             )
+    #     except Exception as e:
+    #         self.logger.error(f"Container start error: {e}")
+    #         print("Container start error:", repr(e))
+    #         self.stop_container()
+    #         return
 
     def start_container(
         self, docker_image: str, command: str, ctr_name: str, **docker_kwargs
     ):
-        # Start or reuse a container
+        max_retries = 12  # Maximum number of retry attempts
+        base_delay = 1    # Initial delay in seconds (will double each retry)
+        print(f"Starting container for docker image {docker_image} with container name {ctr_name}")
         try:
             containers = self.client.containers.list(
                 all=True, filters={"name": ctr_name}
             )
             if containers:
+                print(f"containers! yay")
+                # print(containers)
                 self.container = containers[0]
+                print(self.container)
+                print(self.container.name)
+                print("starting")
                 if self.container.status != "running":
                     self.container.start()
+                print("started!")
             else:
-                self.container = self.client.containers.run(
-                    docker_image,
-                    command,
-                    name=ctr_name,
-                    detach=True,
-                    tty=True,
-                    stdin_open=True,
-                    # environment={"PATH": "/commands"},
-                    **docker_kwargs,
-                )
+                try:
+                    #Check if container exists on local machine first
+                    print("amphibian")
+                    self.client.images.get(docker_image)
+                    print("toaders")
+                    self.container = self.client.containers.run(
+                        docker_image,
+                        command,
+                        name=ctr_name,
+                        detach=True,
+                        tty=True,
+                        stdin_open=True,
+                        **docker_kwargs,
+                    )
+                    print(self.container)
+                    print(self.container.name)
+                    print("froggers")
+                except Exception as e:
+                    print("Start container error")
+                    print(e)
+                    return
         except Exception as e:
-            print("Container start error:", repr(e))
-            self.stop_container()
+            print(e)
             return
+            # except Exception as e:
+            #     # Check if it's a Docker server error (500) and we have retries left
+            #     if hasattr(e, 'status_code') and e.status_code == 500 and attempt < max_retries:
+            #         delay = base_delay * (2 ** attempt)  # Exponential backoff
+            #         self.logger.warning(
+            #             f"Docker server error (attempt {attempt + 1}/{max_retries}): "
+            #             f"Retrying in {delay:.1f}s - {e}"
+            #         )
+            #         time.sleep(delay)
+            #         attempt += 1
+            #         continue
+                
+            #     # Handle non-retryable errors
+            #     self.logger.error(f"Container start error: {e}")
+            #     print("Container start error:", repr(e))
+            #     self.stop_container()
+            #     return
 
         # Prepare the subprocess for interaction
         startup_cmd = ["docker", "exec", "-i", ctr_name, "/bin/bash", "-l"]
@@ -219,54 +290,59 @@ class DockerRuntime(ExecutionEnvironment):
             )
 
     def setup_env(self):
-        if self.swebench_verified:
-            return self.setup_env_swebench()
+        print("Running environment setup")
+        # if self.swebench_verified:
+        #     return self.setup_env_swebench()
 
         try:
-            # setup venv
-            # modify the repo path to a common path
-            # self.run(f"cp -r {self.repo_path} /workspace")
+            self.run("mv /workspace /testbed", workdir="/")
+            self.run("mkdir /workspace", workdir="/")
+            # # setup venv
+            # # modify the repo path to a common path
+            # # self.run(f"cp -r {self.repo_path} /workspace")
 
-            # create a symlink from repo_path/.venv to /root/.venv
-            self.run(f"ln -s {self.repo_path}/.venv {self.alt_path}/.venv")
+            # # create a symlink from repo_path/.venv to /root/.venv
+            # self.run(f"ln -s {self.repo_path}/.venv {self.alt_path}/.venv")
 
-            self.run(
-                f"ln -s {self.repo_path}/.venv/bin/python {self.alt_path}/.local/bin/python"
-            )
-            self.run(
-                f"ln -s {self.repo_path}/.venv/bin/python {self.alt_path}/.local/bin/python3"
-            )
-            self.run(
-                f"find {self.repo_path}/.venv/bin -type f -executable -exec ln -sf {{}} {self.alt_path}/.local/bin/ \\;"
-            )
-            # print(self.run(f"ls -l {self.alt_path}/.local/bin"))
+            # self.run(
+            #     f"ln -s {self.repo_path}/.venv/bin/python {self.alt_path}/.local/bin/python"
+            # )
+            # self.run(
+            #     f"ln -s {self.repo_path}/.venv/bin/python {self.alt_path}/.local/bin/python3"
+            # )
+            # self.run(
+            #     f"find {self.repo_path}/.venv/bin -type f -executable -exec ln -sf {{}} {self.alt_path}/.local/bin/ \\;"
+            # )
+            # # print(self.run(f"ls -l {self.alt_path}/.local/bin"))
 
-            # self.run(f"mv {self.repo_path} /workspace")
-            # self.repo_path = "/workspace"
+            # # self.run(f"mv {self.repo_path} /workspace")
+            # # self.repo_path = "/workspace"
 
-            # install required packages
-            # self.run("uv pip install tree_sitter_languages") # remove since already installed in new dockers
+            # # install required packages
+            # # self.run("uv pip install tree_sitter_languages") # remove since already installed in new dockers
 
-            self.run("uv pip install chardet")
+            self.run("uv pip install --system chardet")
+            self.run("apt-get update && apt-get install -y xvfb")
+            print("XVFB INSTALLED!!!!")
 
-            self.run("find . -name '*.pyc' -delete")
+            # self.run("find . -name '*.pyc' -delete")
 
-            self.run("find . -name '__pycache__' -exec rm -rf {} +")
+            # self.run("find . -name '__pycache__' -exec rm -rf {} +")
 
-            # also delete pycache and pyc from /r2e_tests
-            self.run("find /r2e_tests -name '*.pyc' -delete")
-            self.run("find /r2e_tests -name '__pycache__' -exec rm -rf {} +")
+            # # also delete pycache and pyc from /r2e_tests
+            # self.run("find /r2e_tests -name '*.pyc' -delete")
+            # self.run("find /r2e_tests -name '__pycache__' -exec rm -rf {} +")
 
-            # move all skip files (if present) to /root
-            for skip_file in SKIP_FILES_NEW:
-                self.run(f"mv {self.repo_path}/{skip_file} {self.alt_path}/{skip_file}")
+            # # move all skip files (if present) to /root
+            # for skip_file in SKIP_FILES_NEW:
+            #     self.run(f"mv {self.repo_path}/{skip_file} {self.alt_path}/{skip_file}")
 
-            # r2e_tests are in the / directory, move them to /root
-            self.run(f"mv /r2e_tests {self.alt_path}/r2e_tests")
+            # # r2e_tests are in the / directory, move them to /root
+            # self.run(f"mv /r2e_tests {self.alt_path}/r2e_tests")
 
-            # make a softlink for /root/r2e_tests (if present)
-            self.run(f"ln -s {self.alt_path}/r2e_tests {self.repo_path}/r2e_tests")
-            # self.run(f"ln -s /r2e_tests {self.repo_path}/r2e_tests")
+            # # make a softlink for /root/r2e_tests (if present)
+            # self.run(f"ln -s {self.alt_path}/r2e_tests {self.repo_path}/r2e_tests")
+            # # self.run(f"ln -s /r2e_tests {self.repo_path}/r2e_tests")
         except Exception as e:
             self.logger.error(f"Error setting up environment: {repr(e)}")
 
@@ -296,11 +372,12 @@ class DockerRuntime(ExecutionEnvironment):
         """
         command = f"timeout {timeout} {code} {args}"
         try:
+            print(f"WORKDIR IS {workdir} or {self.repo_path} for command {command}")
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 # Notice we do NOT set tty=True here
                 future = executor.submit(
                     self.container.exec_run,
-                    cmd=["/bin/sh", "-c", command],
+                    cmd=["/bin/bash", "-c", command],
                     # cmd=command,
                     workdir=self.repo_path if workdir is None else workdir,
                     stdout=True,
@@ -319,7 +396,7 @@ class DockerRuntime(ExecutionEnvironment):
 
             if error_code != 0:
                 self.logger.error(
-                    f"Error: Exit code {error_code} \nError Message: {output}"
+                    f"Error: Exit code {error_code} \nError Message: {output} \nCommand: {command}"
                 )
                 return output, f"Error: Exit code {error_code}"
 
@@ -380,13 +457,19 @@ class DockerRuntime(ExecutionEnvironment):
             dest_path: Destination path inside the container.
         """
         # Create a tar archive of the source file/directory
+        print(f"Docker Runtime copying {src_path} to {dest_path}")
         tar_stream = io.BytesIO()
         with tarfile.open(fileobj=tar_stream, mode="w") as tar:
             tar.add(src_path, arcname=os.path.basename(dest_path))
         tar_stream.seek(0)
 
         # Use Docker API to put the archive into the container
-        self.container.put_archive(os.path.dirname(dest_path), tar_stream.read())
+        archive_put = self.container.put_archive(os.path.dirname(dest_path), tar_stream.read())
+        # print(f":333333333333333333wtfwhyunowork:\n {self.run('ls -l /usr/local/bin')[0]}")
+        print(f"{archive_put} for {src_path} to {dest_path}")
+        voidvoidvoid = self.run(f"ls -l {dest_path}")
+        # print(f":333333333333333333wtfwhyunowork2:\n {voidvoidvoid[0]}")
+        
 
     @DeprecationWarning  # TODO: remove dependency on this method with new dockers
     def read_file(self, rel_file_path: str) -> str:
@@ -394,6 +477,17 @@ class DockerRuntime(ExecutionEnvironment):
         return output
 
     def run_tests(self) -> tuple[str, str]:
+#         frog, frogchamp = self.run(f"""cat > "{self.alt_path}/run_tests.sh" << 'EOF'
+# #!/bin/bash
+# # Run tests with detailed error reporting
+# PYTHONWARNINGS='ignore::UserWarning,ignore::SyntaxWarning' \\
+# .venv/bin/python -W ignore \\
+# -m pytest -rA --tb=long -v r2e_tests
+# EOF
+# chmod +x "{self.alt_path}/run_tests.sh" """, timeout=300)
+#         print("FROGGERS")
+#         print(frog)
+#         print("FROGGERS")
         output, error_code = self.run(f"bash {self.alt_path}/run_tests.sh", timeout=300)
         # Remove ANSI escape codes and \r characters
         output = re.sub(r"\x1b\[[0-9;]*m|\r", "", output)
@@ -545,24 +639,38 @@ class DockerRuntime(ExecutionEnvironment):
         try:
             expected_json = self.ds["expected_output_json"]
         except Exception as e:
+            raise
             expected_json = self.read_file("expected_test_output.json")
 
         expected: dict = json.loads(expected_json)
         expected = decolor_dict_keys(expected)
         parse = {k.split(" - ")[0]: parse[k] for k in sorted(parse.keys())}
         expected = {k.split(" - ")[0]: expected[k] for k in sorted(expected.keys())}
-
+        print(f"EXPECTED IS {expected} with len {len(expected)} compared to parsed {parse} with len {len(parse)}")
         # Compare
-        if len(parse) != len(expected):
-            reward = 0.0
-        else:
+        # if len(parse) != len(expected):
+        #     reward = 0.0
+        # else:
             # If ANY mismatch, reward = 0.0, else = 1.0
-            match = True
-            for k in parse.keys():
-                if parse[k] != expected[k]:
-                    match = False
-                    break
-            reward = 1.0 if match else 0.0
+        match = True
+        for k in parse.keys():
+            if k not in expected:
+                match = False
+                break
+            if parse[k] != expected[k]:
+                match = False
+                break
+        reward = 1.0 if match else 0.0
+        if reward == 1.0:
+            kms = {
+                "expected": expected,
+                "expected_len": len(expected),
+                "parsed": parse,
+                "parsed_len": len(parse),
+                "reward": reward
+            }
+            with open ("WTFISTHISSHIT.jsonl", "a") as wtf:
+                wtf.write(json.dumps(kms) + "\n")
         # If the caller wants the test output as well, return (reward, output)
         if get_test_output:
             return reward, output

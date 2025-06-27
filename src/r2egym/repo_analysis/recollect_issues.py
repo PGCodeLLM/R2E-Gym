@@ -21,20 +21,20 @@ os.environ['DEEPSEEK_API_KEY'] = 'sk-8b2e0e39b7a642ca819c752c95199f70'
 
 from deepseek import Client
 client = Client(api_key="sk-8b2e0e39b7a642ca819c752c95199f70", base_url="https://api.deepseek.com")
-tokenizer = tiktoken.encoding_for_model("deepseek-chat")
+tokenizer = tiktoken.encoding_for_model("deepseek-reasoner")
 
 # client = OpenAI(api_key="sk-8b2e0e39b7a642ca819c752c95199f70", base_url="https://api.deepseek.com")
-# tokenizer = tiktoken.encoding_for_model("deepseek/deepseek-chat") 
+# tokenizer = tiktoken.encoding_for_model("deepseek/deepseek-reasoner") 
 
 def run_deepseek_r1_zero(prompt):
     print('*'*1000)
     response = client.chat.completions.create(
         messages=prompt,
-        model="deepseek-chat", 
+        model="deepseek-reasoner", 
         provider="deepseek", 
         max_completion_tokens=12000, 
     )
-    return response.choices[0].message.content
+    return response.choices[0].message.content, response.choices[0].message.reasoning_content
 
 
 def run_o1mini(prompt):
@@ -86,8 +86,8 @@ def main():
 
         for i, completion in enumerate(completions):
             data[i].prompt = prompts[i][0]["content"]
-            data[i].problem_statement = completion
-
+            data[i].problem_statement = completion[0]
+            data[i].reasoning = completion[1]
         with open(f"repo_datasets/{repo_name}.jsonl", "w") as f:
             for d in data:
                 f.write(json.dumps(d.model_dump_json(indent=None)) + "\n")

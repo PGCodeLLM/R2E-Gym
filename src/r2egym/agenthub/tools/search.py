@@ -1,4 +1,4 @@
-#!/root/.venv/bin/python
+#!/usr/local/bin/python
 """
 Description: Search for a term in either a directory or a single file.
 

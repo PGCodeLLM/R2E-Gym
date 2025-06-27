@@ -11,6 +11,17 @@ import json
 import concurrent.futures
 import threading
 import multiprocessing
+from pymongo import MongoClient
+import pandas as pd
+import traceback
+import docker
+import pyarrow as pa
+import pyarrow.compute as pc
+import pyarrow.dataset as pds
+from mindforge_harness.utils import (
+    consistent_hash,
+)
+
 
 from r2egym.agenthub.runtime.docker import DockerRuntime
 from r2egym.agenthub.environment.env import EnvArgs, RepoEnv
@@ -18,13 +29,13 @@ from r2egym.agenthub.agent.agent import AgentArgs, Agent
 
 from docker_bash_utils.docker_list_tags import fetch_docker_tags
 from r2egym.agenthub.utils.log import get_logger
-from r2egym.logging import setup_logging, INFO
+from r2e_logging import setup_logging, INFO
 from r2egym.agenthub.utils.utils import get_parsed_commit
 
 from fire import Fire
 from r2egym.agenthub.utils.utils import match_dockerimage_to_repo
 from r2egym.agenthub import SUPPORTED_REPOS
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
 from r2egym.agenthub.trajectory import TrajectoryStep, Trajectory
 
 ##############################################################################
@@ -39,22 +50,6 @@ file_lock = threading.Lock()
 
 
 ##############################################################################
-# Utility Function
-##############################################################################
-def get_docker_images(repo_name) -> List[str]:
-    """
-    Fetches the list of Docker images available for the base image.
-
-    Returns:
-        A list of Docker image tags.
-    """
-    base_image = f"namanjain12/{repo_name}new"
-    tags = fetch_docker_tags(base_image)
-    docker_image_list = [f"{base_image}:{x['name']}" for x in tags]
-    return docker_image_list
-
-
-##############################################################################
 # editagent Functions
 ##############################################################################
 def run_agent_with_restarts(
@@ -65,6 +60,7 @@ def run_agent_with_restarts(
 
     for idx in range(num_restarts):
         logger.warning(f"running agent at idx: {idx+1}")
+        print()
         trajectory = agent.run(
             env,
             max_steps=steps_per_agent,
@@ -102,6 +98,7 @@ def runagent(
         jsonl_file: Path to the JSONL file to save results. If not provided, generated using traj_dir and exp_name.
         exp_name: Experiment name. Used if jsonl_file is not provided. If not provided, a unique name is generated.
     """
+    print(":3")
     logger = setup_logging(
         name=ds["docker_image"].replace("/", "_"),
         log_file=f"run_logs/{exp_name}/{ds['docker_image'].replace('/', '_')}.log",
@@ -115,21 +112,28 @@ def runagent(
     # Generate a unique experiment name if not provided
     if exp_name is None:
         exp_name = datetime.now().strftime("%Y%m%d_%H%M%S")
-
+    
     # Initialize environment arguments
     env_args = EnvArgs(ds=ds)
-
     # Initialize the RepoEnv
+    print("WHY ARE YOU NOT WORKING")
+    # print(env_args)
     env = RepoEnv(env_args, logger=logger)
+    print("kms")
     # set agent args
     if use_fn_calling:
+        print("fml")
         agent_args = AgentArgs.from_yaml(
             Path("./agenthub/config/edit_fn_calling.yaml")
         )
+        print("fml")
     else:
+        print("fml2")
         agent_args = AgentArgs.from_yaml(
             Path("./agenthub/config/edit_non_fn_calling.yaml")
         )
+        print("fml2")
+    print(":3333")
     agent_args.llm_name = llm_name
     if llm_base_url:
         agent_args.llm_base_url = llm_base_url
@@ -138,6 +142,7 @@ def runagent(
     agent = Agent(name="EditAgent", args=agent_args, logger=logger, sem=sem)
 
     # run agent editagent
+    print(":33")
     try:
         trajectory = run_agent_with_restarts(
             agent,
@@ -155,7 +160,11 @@ def runagent(
             f"Error during agent run for Docker image {ds['docker_image']}: {e}"
         )
         return None
-
+    test_sh_name = f"temp_sh_folder/{ds['instance_id']}.sh"
+    with open(test_sh_name, "w") as f:
+        # f.write(ds["spec_dict"]["test_cmd"])
+        f.write("QT_QPA_PLATFORM=minimal PYTHONWARNINGS='ignore::UserWarning,ignore::SyntaxWarning' pytest -rA")
+    env.runtime.copy_to_container(test_sh_name, "/root/run_tests.sh")
     # also get the gt outputs
     reward, test_output = env.runtime._calculate_reward(get_test_output=True)
     # Close the environment and runtime
@@ -174,8 +183,6 @@ def runagent(
 
 
 def runagent_multiple(
-    dataset: str,
-    split: str,
     k: int = 1,
     traj_dir: str = "./traj",
     exp_name: Optional[str] = None,
@@ -186,7 +193,7 @@ def runagent_multiple(
     max_workers: Optional[int] = None,
     llm_name="gpt-4o",
     use_existing: bool = False,
-    skip_existing: bool = True,
+    skip_existing: bool = False,
     temperature: float = 0,
     top_p: float = 0.8,
     presence_penalty: float = 1.5,
@@ -206,7 +213,53 @@ def runagent_multiple(
         max_workers: Maximum number of threads to use.
     """
     # Load the dataset
-    ds = load_dataset(dataset, split=split)
+    mongo_uri = "mongodb://bmc:GwvDjDyUnm1GpRT6sMAq7rUo44EDmzuv02Tn9n5mmqvZyn3Zvsee4ozdCGFN57qXRqKEYethBPQfErCGE4oAr3feVuqjpcBuF2em@10.10.100.43:26969/"
+    db_name="swe_gym_plus"
+    collection_name="r2e_instances"
+    mongo_client = MongoClient(mongo_uri)
+    db = mongo_client[db_name]
+    collection = db[collection_name]
+    cursor = collection.find({"verified": True}, {
+        "_id": 0,
+        "last_modified": 0,
+        "issue_numbers": 0,
+        "created_at": 0,
+        "patch_file_contents": 0,
+        "test_patch_file_contents": 0
+    })
+    documents = list(cursor)
+    df = pd.DataFrame(documents)
+    print(df)
+    temp_client = docker.from_env()
+    image_list = temp_client.images.list(
+        all=True
+    )
+    image_label_list = [im.attrs["RepoTags"][0][:-7] for im in image_list if len(im.attrs["RepoTags"])>0 and im.attrs["RepoTags"][0].startswith("eval-")]
+    print(len(image_label_list))
+    print(image_label_list)
+    def add_image_name(entry):
+        hash = consistent_hash(entry["spec_dict"])
+        image_name = f"eval-{entry['repo'].replace('/','-').lower()}-{hash[0:8]}"
+        # print(image_name)
+        if image_name in image_label_list:
+            # logger.info(image_name)
+            return image_name
+        return ""
+    df["docker_image"] = df.apply(add_image_name, axis=1)
+    df = df[df["docker_image"] != ""]
+    def add_image_commit(entry):
+        return entry["base_commit"]
+    df["commit_hash"] = df.apply(add_image_commit, axis=1)
+    def stringify_commit(entry):
+        entry["parsed_commit_content"]["commit_date"] = entry["parsed_commit_content"]["commit_date"].timestamp()
+        return json.dumps(entry["parsed_commit_content"])
+    df["parsed_commit_content"] = df.apply(stringify_commit, axis=1)
+    print(df)
+    ds = Dataset.from_pandas(df)
+    # print(ds[0])
+    
+    print(image_list[0])
+    print(image_list[0].attrs["RepoTags"][0])
     logger.info(f"{len(ds)}, {k}, {start_idx}")
     # shuffle the dataset
     ds = ds.shuffle(seed=42)
@@ -217,7 +270,7 @@ def runagent_multiple(
     num_base = len(llm_base_urls)
     # print ds_selected stats
     logger.info(
-        f"Dataset: {dataset}, Split: {split}, Num_total: {len(ds)}, Start Index: {start_idx}, k: {k}"
+        f"Num_total: {len(ds)}, Start Index: {start_idx}, k: {k}"
     )
     logger.info(f"Starting editagent on {len(ds_selected)} Docker images.")
 
@@ -232,6 +285,7 @@ def runagent_multiple(
     # Generate a filename for the JSONL file
     jsonl_file = traj_dir_path / f"{exp_name}.jsonl"
 
+    assert not use_existing
     if use_existing:
         if jsonl_file.exists():
             with open(jsonl_file) as f:
@@ -251,7 +305,7 @@ def runagent_multiple(
                 for ds_entry in ds_selected
                 if ds_entry["docker_image"] not in existing_dockers
             ]
-
+    # assert skip_existing
     if skip_existing:
         old_jsonl_files_glob = f"{exp_name[:-1]}*"
         for old_jsonl_file in traj_dir_path.glob(old_jsonl_files_glob):
@@ -262,12 +316,13 @@ def runagent_multiple(
                     for loadline in [json.loads(line)]
                     if loadline["reward"] == 1
                 ]
-
             ds_selected = [
                 ds_entry
                 for ds_entry in ds_selected
                 if ds_entry["docker_image"] not in existing_dockers
             ]
+        # frog.write(f"existing_dockers {len(existing_dockers)}\n")
+        # frog.write(f"selected {len(ds_selected)}")
 
     logger.info(
         f"Starting editagent on {len(ds_selected)} Docker images after filtering."
@@ -310,10 +365,10 @@ def runagent_multiple(
                         if result is not None:
                             with file_lock:
                                 f.write(result + "\n")
-                    except Exception as e:
+                    except Exception:
                         # Use docker_image from above when logging
-                        logger.error(f"Exception for Docker image {docker_image}: {e}")
-
+                        logger.error(f"Exception for Docker image {docker_image}")
+                        logger.error(traceback.format_exc())
         logger.info(f"editagent completed on {len(ds_selected)} Docker images.")
 
 

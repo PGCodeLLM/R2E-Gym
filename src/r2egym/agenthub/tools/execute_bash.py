@@ -1,4 +1,4 @@
-#!/root/.venv/bin/python
+#!/usr/local/bin/python
 """
 Description: Execute a bash command in the terminal, with Python version compatibility.
 

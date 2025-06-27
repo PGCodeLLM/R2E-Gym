@@ -45,6 +45,16 @@ CONTINUE_MSG = """
 You forgot to use a function call in your response. 
 YOU MUST USE A FUNCTION CALL IN EACH RESPONSE.
 
+THE FUNCTION CALL MUST BE IN THIS FORMAT:
+<function=example_function_name>
+<parameter=example_parameter_1>value_1</parameter>
+<parameter=example_parameter_2>
+This is the value for the second parameter
+that can span
+multiple lines
+</parameter>
+</function>
+
 IMPORTANT: YOU SHOULD NEVER ASK FOR HUMAN HELP.
 """
 

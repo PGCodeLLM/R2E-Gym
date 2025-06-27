@@ -11,7 +11,7 @@ from r2egym.agenthub.trajectory.swebench_utils import (
     swebench_parse,
     PASS_TO_PASS,
 )
-
+from typing import Optional
 
 # ##############################################################################
 # # TrajectoryStep Dataclass for per step stats
@@ -25,7 +25,7 @@ class TrajectoryStep(BaseModel):
     observation: str
     done: bool
     info: dict
-    reasoning: str
+    reasoning: Optional[str] = None
 
     ## tokens
     token_usage_prompt: int

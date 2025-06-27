@@ -148,8 +148,9 @@ class Action:
             param_value_quoted = shlex.quote(str(param_value))
             cmd_parts.append(f"--{param_key}")
             cmd_parts.append(param_value_quoted)
-
-        return " ".join(cmd_parts)
+        bash_command = " ".join(cmd_parts)
+        print(f"CREATED BASH COMMAND {bash_command}")
+        return bash_command
 
 
 if __name__ == "__main__":

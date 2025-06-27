@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from r2e.paths import REPOS_DIR
 import r2egym.repo_analysis.issues as issues
-from r2egym.logging import setup_logging, Logger, INFO
+from r2e_logging import setup_logging, Logger, INFO
 from r2egym.agenthub.runtime.docker import DockerRuntime
 from r2egym.commit_models.diff_classes import ParsedCommit
 from r2egym.repo_analysis.build_syn_issue import get_prompt
@@ -604,6 +604,9 @@ def collect_rows(
 
 
 def main():
+
+
+    raise #Make sure we don't use anything in here...
 
     repo_names = [
         "tornado",

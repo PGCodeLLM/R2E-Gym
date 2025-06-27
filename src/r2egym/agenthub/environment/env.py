@@ -32,11 +32,10 @@ class RepoEnv(gym.Env):
             self.logger = get_logger("RepoEnv")  # Pass the module name for clarity
         else:
             self.logger = logger
-
         self.runtime = DockerRuntime(
             ds=args.ds, command=["/bin/bash", "-l"], logger=self.logger
         )
-
+        print(self.runtime)
         self.args = args
         self.done = False
         self.observation = None
@@ -68,6 +67,9 @@ class RepoEnv(gym.Env):
         for cmd_file in cmd_files:
             # Parse commands from file
             parsed_commands = self.cmd_parser.parse_command_file(cmd_file)
+            print("PARSED COMMANDS!")
+            print(parsed_commands)
+            print("PARSED COMMANDS! :33333333333333")
             cmds.extend(parsed_commands)
 
             # Determine the file extension
@@ -84,8 +86,9 @@ class RepoEnv(gym.Env):
                     container_cmd_name = cmd_name
                 container_path = f"/usr/local/bin/{container_cmd_name}"
                 self.runtime.copy_to_container(cmd_file, container_path)
-                self.runtime.run(f"chmod +x {container_path}")
-
+                endmepls = self.runtime.run(f"chmod +x {container_path}")
+                print(f"endmepls {endmepls}")
+                
             elif ext == ".sh":
                 # Bash script ending with .sh: copy, chmod, and source it
                 container_cmd_name = cmd_name
@@ -107,6 +110,7 @@ class RepoEnv(gym.Env):
         # Store the parsed commands for reference
         self.commands = cmds
         self.logger.info(f"Added {len(cmds)} commands to the environment.")
+        # print(f":333333333333333333hama:\n {self.runtime.run('ls -l /usr/local/bin')[0]}")
 
     def _is_shebang_script(self, cmd_file: str) -> bool:
         """
@@ -138,6 +142,8 @@ class RepoEnv(gym.Env):
 
             # Run action and return
             bash_cmd = action.to_bashcmd()
+            print(f"PATH ENV VAR IS {self.runtime.run('echo $PATH')[0]}")
+            # print(f"CONTENTS OF USRLOCALBIN IS {self.runtime.run('ls -l /usr/local/bin')[0]}")
             bash_output, error_code = self.runtime.run(bash_cmd, timeout=timeout)
         except Exception as e:
             # Capture the error message as observation
