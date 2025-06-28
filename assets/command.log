@@ -1,5 +1,15 @@
 Command
+
+vu venv
+
 @ /shared_workspace/kim/R2E-Gym/src/r2egym
 
-uv run python agenthub/run/edit.py runagent_multiple   --traj_dir "./traj"   --max_workers 1   --start_idx 0   --k 1   --dataset "R2E-Gym/R2E-Gym-Lite"   --split "train"   --llm_name 'deepseek/deepseek-chat'   --use_fn_calling True   --exp_name r2egym-training-trajectories   --temperature 0.2   --max_steps 40 --llm_base_url https://api.deepseek.com
 
+uv run python agenthub/run/edit.py runagent_multiple   --traj_dir "./traj"   --max_workers 10   --start_idx 0   --k 1   --dataset "R2E-Gym/R2E-Gym-Lite"   --split "train"   --llm_name 'deepseek/deepseek-reasoner'   --use_fn_calling True   --exp_name r2egym-training-trajectories   --temperature 0.2   --max_steps 40 --llm_base_url https://api.deepseek.com
+
+
+
+cd /shared_workspace_mfs/arthur/R2E-Gym/src/r2egym
+docker ps -a | grep namanjain | awk '{print$1}' | xargs docker stop | xargs docker rm;
+
+uv run python agenthub/run/edit.py runagent_multiple   --traj_dir "./traj"   --max_workers 10   --start_idx 0   --k 4578   --dataset "R2E-Gym/R2E-Gym-Subset"   --split "train" --llm_base_urls http://lux-2-cyber-03:2105/v1  --llm_name 'Qwen/Qwen3-235B-A22B'   --use_fn_calling True   --exp_name r2egym-qwen235b-rej-sample-pt2   --temperature 0.2   --max_steps 40

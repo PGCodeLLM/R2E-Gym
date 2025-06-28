@@ -2,7 +2,7 @@
 
 import openai
 import re
-import yaml
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -16,6 +16,7 @@ from r2egym.agenthub.runtime.docker import DockerRuntime
 from r2egym.agenthub.environment.env import EnvArgs, RepoEnv
 from r2egym.agenthub.agent.agent import AgentArgs, Agent
 
+sys.path.append("../../")
 from docker_bash_utils.docker_list_tags import fetch_docker_tags
 from r2egym.agenthub.utils.log import get_logger
 from r2egym.logging import setup_logging, INFO
@@ -135,7 +136,7 @@ def runagent(
         agent_args.llm_base_url = llm_base_url
 
     # Initialize the agent
-    agent = Agent(name="EditAgent", args=agent_args, logger=logger, sem=sem)
+    agent = Agent(name="EditAgent", args=agent_args, logger=logger)
 
     # run agent editagent
     try:
@@ -260,7 +261,7 @@ def runagent_multiple(
                     loadline["ds"]["docker_image"]
                     for line in f
                     for loadline in [json.loads(line)]
-                    if loadline["reward"] == 1
+                    # if loadline["reward"] == 1
                 ]
 
             ds_selected = [

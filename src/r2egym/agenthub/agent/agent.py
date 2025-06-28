@@ -71,7 +71,9 @@ class Agent:
         # self.llm_base_url = "http://10.10.100.19:8000/v1"
         # self.llm_api_key = 'sk-mySuperDuperSecretKeyWithSoManyLettersAndNum2er3'
         self.llm_base_url = getattr(args, "llm_base_url", "https://api.deepseek.com")
-        self.llm_api_key = 'sk-8b2e0e39b7a642ca819c752c95199f70'
+        self.llm_api_key = getattr(args, "llm_api_key", "")
+
+
         self.system_prompt_template = args.system_prompt
         self.instance_prompt_template = args.instance_prompt
         self.command_files = args.command_files
@@ -288,13 +290,13 @@ class Agent:
                 }
                 if tools:
                     kwargs = {}
-                print('$'*1000)
+                print('$'*100)
                 print(self.llm_base_url)
                 print(self.llm_api_key)
                 print(self.llm_name)
                 print(tools)
                 print(messages_)
-                print('$'*1000)
+                print('$'*100)
                 if self.llm_name == "Qwen/Qwen3-235B-A22B":
                     response = litellm.completion(
                         model=f"hosted_vllm/{self.llm_name}",
@@ -309,9 +311,9 @@ class Agent:
                             "min_p": 0,
                         },
                         api_base=self.llm_base_url,
-                        api_key="sk-mySuperDuperSecretKeyWithSoManyLettersAndNum2er3",
+                        api_key=self.llm_api_key,
                         # max_tokens=3000,
-                        **kwargs,
+                        **kwargs
                     )
                 else:
                     response = litellm.completion(
@@ -323,7 +325,7 @@ class Agent:
                         api_base=self.llm_base_url,
                         api_key=self.llm_api_key,
                         # max_tokens=3000,
-                        **kwargs,
+                        **kwargs
                     )
                 self.logger.warning(f"Querying LLM complete")
                 break
@@ -503,7 +505,8 @@ class Agent:
             assistant_message = response.choices[0].message.content
             assistant_reasoning = getattr(response.choices[0].message, "reasoning_content", None)
 
-            self.logger.info(f"Assistant's message:\n{assistant_message}\n")
+            self.logger.info(f"Assistant's message len:\n{len(assistant_message)}\n")
+            self.logger.info(f"Assistant's reasoning len:\n{len(assistant_reasoning)}\n")
 
             if self.use_fn_calling:
                 thought, action = self.custom_parser(response)

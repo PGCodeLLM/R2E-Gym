@@ -130,7 +130,8 @@ instance_prompt: |-
   5. Think about edgecases and make sure your fix handles them as well
   6. When viewing large files, use specific line-ranges, usually within 50 to 100 lines) as required
   7. NOTE: The repository is at '/testbed' and the current working directory is already '/testbed', so DO NOT include 'testbed/' or 'testbed.' in relative paths in bash commands or reproduction python files. 
-  
+  8. You MUST ensure all unit tests are passing before submitting, as long as there are remaining steps left. Use all efforts to resolve all test failures.
+
 command_files:
   - "./agenthub/tools/file_editor.py"
   - "./agenthub/tools/search.py"

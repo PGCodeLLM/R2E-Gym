@@ -25,7 +25,7 @@ class TrajectoryStep(BaseModel):
     observation: str
     done: bool
     info: dict
-    reasoning: str
+    reasoning: Optional[str] = None
 
     ## tokens
     token_usage_prompt: int
