@@ -71,14 +71,14 @@ class Agent:
         # )
         # self.llm_base_url = "http://10.10.100.19:8000/v1"
         self.llm_base_url = getattr(args, "llm_base_url", "https://api.deepseek.com")
-        # self.llm_api_key = ""
+        self.llm_api_key = 'frogchamp'
         self.system_prompt_template = args.system_prompt
         self.instance_prompt_template = args.instance_prompt
         self.command_files = args.command_files
         self.other_args = args.other_args or {}
         self.logger.info(f"Initialized Agent: {name} with LLM: {args.llm_name}")
         self.max_retries = self.other_args.get("max_retries", 3)
-        self.llm_timeout = self.other_args.get("timeout", 120)
+        self.llm_timeout = self.other_args.get("timeout", 240)
         self.sem = sem
     def prepare_system_message(
         self, problem_statement: str, structure: str, command_docs: str, demo: str
@@ -412,7 +412,7 @@ class Agent:
         max_token_limit: int = 32768,  # 32k tokens
         # time limits
         max_exec_time: int = 90,  # 5 mins per env execution
-        max_total_time: int = 1200,  # 20 minutes overall agent run limit
+        max_total_time: int = 3600,  # 20 minutes overall agent run limit
         max_llm_time: int = 120,  # 2 mins per LLM timeout (note this is per query exlcuding retries | not enforcing hard limit since llm might hit rate limits etc)
         # temperature
         temperature=0,

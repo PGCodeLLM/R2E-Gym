@@ -131,7 +131,7 @@ class DockerRuntime(ExecutionEnvironment):
         print("painpeko")
         print(self.run("find / -maxdepth 1 -type d -printf '%f\n'", workdir="/"))
         print("voivode")
-        self.setup_env()
+        self.setup_env(self.ds)
         self.logger.info("Docker environment initialized")
         self.logger.info("repo name: %s", self.repo_name)
         self.logger.info("Docker image: %s", self.docker_image)
@@ -281,6 +281,10 @@ class DockerRuntime(ExecutionEnvironment):
             #     "python -m pip install tree-sitter==0.20.4 tree_sitter_languages==1.10.2"
             # )
             self.run("python -m pip install chardet")
+            
+            #Try enabling this?
+            # self.run("python -m pip install typing_extensions") 
+            
             # sudo apt-get install patchutils
             # self.run("apt-get update")
             # self.run("apt-get install -y patchutils")
@@ -289,7 +293,7 @@ class DockerRuntime(ExecutionEnvironment):
                 f"Error setting up environment: {repr(e)} @ {self.docker_image}"
             )
 
-    def setup_env(self):
+    def setup_env(self, ds):
         print("Running environment setup")
         # if self.swebench_verified:
         #     return self.setup_env_swebench()
@@ -297,6 +301,10 @@ class DockerRuntime(ExecutionEnvironment):
         try:
             self.run("mv /workspace /testbed", workdir="/")
             self.run("mkdir /workspace", workdir="/")
+            print("CHECKING OUT!")
+            res = self.checkout(ds["base_commit"])
+            print(res)
+            
             # # setup venv
             # # modify the repo path to a common path
             # # self.run(f"cp -r {self.repo_path} /workspace")
@@ -488,9 +496,17 @@ class DockerRuntime(ExecutionEnvironment):
 #         print("FROGGERS")
 #         print(frog)
 #         print("FROGGERS")
-        output, error_code = self.run(f"bash {self.alt_path}/run_tests.sh", timeout=300)
+        applypatchout = self.apply_patch(self.ds["test_patch"])
+        print(applypatchout)
+        print("INSTALLING")
+        res = self.run("uv pip install --system -e .", workdir="/testbed")
+        print("RESOLUTION OF RUN TEST:")
+        print(res)
+        output, error_code = self.run(f"bash {self.alt_path}/run_tests.sh", timeout=300, workdir="/testbed")
         # Remove ANSI escape codes and \r characters
         output = re.sub(r"\x1b\[[0-9;]*m|\r", "", output)
+        
+
         return output, error_code
 
     def demux_run_tests(self) -> tuple[str, str, str]:
@@ -503,7 +519,9 @@ class DockerRuntime(ExecutionEnvironment):
         return stdout, stderr, error_code
 
     def checkout(self, commit_hash: str) -> tuple[str, str]:
-        output, error_code = self.run(f"git checkout {commit_hash}")
+        killyourself = self.run("rm -f .git/index.lock", workdir="/testbed")
+        print(killyourself)
+        output, error_code = self.run(f"git checkout {commit_hash}", workdir="/testbed")
         return output, error_code
 
     def get_patch(self) -> str:
@@ -538,7 +556,7 @@ class DockerRuntime(ExecutionEnvironment):
         # copy the patch to / of the container
         self.copy_to_container(patch_path, f"/{patch_path}")
         # apply the patch
-        output, error_code = self.run(f"git apply --whitespace=fix /{patch_path}")
+        output, error_code = self.run(f"git apply --whitespace=fix {patch_path}", workdir="/testbed")
         return output, error_code
 
     def reverse_patch(self, patch: str) -> tuple[str, str]:
@@ -633,17 +651,28 @@ class DockerRuntime(ExecutionEnvironment):
     def _calculate_reward_r2e(self, get_test_output=False) -> float:
         # calculate reward based for r2e-edit dockers
         output, error_code = self.run_tests()
-        # print(output)x
-        parse = self.parse_logs(output)
-        parse = decolor_dict_keys(parse)
         try:
             expected_json = self.ds["expected_output_json"]
         except Exception as e:
+            print(e)
+            print("SOMETHING IS ROTTEN IN THE STATE OF EXPECTED OUTPUT")
             raise
             expected_json = self.read_file("expected_test_output.json")
-
         expected: dict = json.loads(expected_json)
         expected = decolor_dict_keys(expected)
+        
+        print("OUTPUT OF RUN TESTS:")
+        print(output)
+        print("VS EXPECTED...")
+        print(f"EXPECTED222 IS {expected}")
+        print("PARSING...")
+        parse = self.parse_logs(output)
+        print("PARSING 2...")
+        parse = decolor_dict_keys(parse)
+        print("DONE PARSING...")
+        
+
+        
         parse = {k.split(" - ")[0]: parse[k] for k in sorted(parse.keys())}
         expected = {k.split(" - ")[0]: expected[k] for k in sorted(expected.keys())}
         print(f"EXPECTED IS {expected} with len {len(expected)} compared to parsed {parse} with len {len(parse)}")
@@ -653,34 +682,57 @@ class DockerRuntime(ExecutionEnvironment):
         # else:
             # If ANY mismatch, reward = 0.0, else = 1.0
         match = True
-        for k in parse.keys():
-            if k not in expected:
-                match = False
-                break
-            if parse[k] != expected[k]:
-                match = False
-                break
+        if len(parse) < 1:
+            reason = "PARSE IS EMPTY, BREAKING..."
+            print(reason)
+            
+            match = False
+        else:
+            for k in expected.keys():
+                reason = ":3"
+                if k not in parse:
+                    match = False
+                    reason = f"K {k} NOT IN PARSED, BREAKING..."
+                    print(reason)
+                    break
+                if expected[k] != parse[k]:
+                    match = False
+                    reason = f"K {k} IN PARSE OF RESULT {parse[k]} NOT EQUAL TO EXPECTED {expected[k]}, BREAKING..."
+                    print(reason)
+                    break
         reward = 1.0 if match else 0.0
-        if reward == 1.0:
-            kms = {
-                "expected": expected,
-                "expected_len": len(expected),
-                "parsed": parse,
-                "parsed_len": len(parse),
-                "reward": reward
-            }
-            with open ("WTFISTHISSHIT.jsonl", "a") as wtf:
-                wtf.write(json.dumps(kms) + "\n")
+        print(f"REWARD IS {reward}")
+        kms = {
+            "expected": expected,
+            "expected_len": len(expected),
+            "parsed": parse,
+            "parsed_len": len(parse),
+            "reward": reward,
+            "reason": reason
+        }
+        print("WRITING TEST OUTPUT....")
+        with open(f"/shared_workspace/alex/tracegen/R2E-Gym/src/r2egym/output_test/{self.container_name}.txt", "w") as f:
+            f.write(output)
+            f.write(f"\nError code: {error_code}\n")
+            f.write("===============PARSED===============\n")
+            f.write(json.dumps(kms) + "\n")
+        # print("WRITING OUTPUT...")
+        # print(kms)
+        # with open ("/shared_workspace/alex/tracegen/R2E-Gym/src/r2egym/traj/WTFISTHISSHIT.jsonl", "a") as wtf:
+        #     wtf.write(json.dumps(kms) + "\n")
+        # print("DONE WRITING OUTPUT")
+        
         # If the caller wants the test output as well, return (reward, output)
+        print(f"REWARD IS STILL {reward}")
         if get_test_output:
             return reward, output
         return reward
 
     def _calculate_reward(self, get_test_output=False) -> float:
-        if self.swebench_verified:
-            return self._calculate_reward_swebench(get_test_output=get_test_output)
-        else:
-            return self._calculate_reward_r2e(get_test_output=get_test_output)
+        # if self.swebench_verified:
+        #     return self._calculate_reward_swebench(get_test_output=get_test_output)
+        # else:
+        return self._calculate_reward_r2e(get_test_output=get_test_output)
 
     def reset(self):
         self.stop_container()

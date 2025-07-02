@@ -18,3 +18,6 @@ assets/command.log
 *.temp_sh_folder
 assets/
 *.yml
+src/r2egym/old_traj/
+src/r2egym/traj/
+src/r2egym/utils_traj/

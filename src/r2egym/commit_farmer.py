@@ -53,13 +53,13 @@ for doc in documents:
         ).__dict__
         expected_output_json = {}
         for p2p in doc["PASS_TO_PASS"]:
-            p2p_name = p2p.split("::")[-1]
+            p2p_name = p2p.split("::")[0].split("/")[-1]+"::"+p2p.split("::")[-1]
             expected_output_json[p2p_name] = "PASSED"
         for f2p in doc["FAIL_TO_PASS"]:
-            f2p_name = f2p.split("::")[-1]
+            f2p_name = f2p.split("::")[0].split("/")[-1]+"::"+f2p.split("::")[-1]
             expected_output_json[f2p_name] = "PASSED"
         for f2f in doc["FAIL_TO_FAIL"]:
-            f2f_name = f2f.split("::")[-1]
+            f2f_name = f2f.split("::")[0].split("/")[-1]+"::"+f2f.split("::")[-1]
             expected_output_json[f2f_name] = "FAILED"
         expected_output_json = json.dumps(expected_output_json)
         doc["expected_output_json"] = expected_output_json

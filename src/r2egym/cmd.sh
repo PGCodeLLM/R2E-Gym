@@ -1,0 +1,3 @@
+uv run python agenthub/run/edit.py runagent_multiple   --traj_dir "./traj"   --max_workers 10   --start_idx 0   --k 4578   --dataset "R2E-Gym/R2E-Gym-Lite"   --split "train"   --llm_name 'Qwen/Qwen3-235B-A22B'   --use_fn_calling True   --exp_name TRACEGEN   --temperature 0.8 --top_p 0.8 --presence_penalty 1.5   --max_steps 40 --llm_base_urls http://10.10.100.19:1105/v1 > container2.txt
+
+wc -l => 4430

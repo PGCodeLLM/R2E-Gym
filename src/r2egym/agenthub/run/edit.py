@@ -93,7 +93,7 @@ def runagent(
     Runs the editagent agent on a specified Docker image.
 
     Args:
-        docker_image: The Docker image to use for the environment.
+        dockerpytest_image: The Docker image to use for the environment.
         traj_dir: Directory to save trajectories.
         jsonl_file: Path to the JSONL file to save results. If not provided, generated using traj_dir and exp_name.
         exp_name: Experiment name. Used if jsonl_file is not provided. If not provided, a unique name is generated.
@@ -163,7 +163,14 @@ def runagent(
     test_sh_name = f"temp_sh_folder/{ds['instance_id']}.sh"
     with open(test_sh_name, "w") as f:
         # f.write(ds["spec_dict"]["test_cmd"])
-        f.write("QT_QPA_PLATFORM=minimal PYTHONWARNINGS='ignore::UserWarning,ignore::SyntaxWarning' pytest -rA")
+        # f.write("QT_QPA_PLATFORM=minimal PYTHONWARNINGS='ignore::UserWarning,ignore::SyntaxWarning' pytest -rA --continue-on-collection-errors")
+        test_string = "QT_QPA_PLATFORM=minimal PYTHONWARNINGS='ignore::UserWarning,ignore::SyntaxWarning' pytest -rA --continue-on-collection-errors "
+        for f2p in ds["FAIL_TO_PASS"]:
+            test_string += " " + f2p.split("::")[0] + " "
+        for p2p in ds["PASS_TO_PASS"]:
+            test_string += " " + p2p.split("::")[0] + " "
+        f.write(test_string)
+
     env.runtime.copy_to_container(test_sh_name, "/root/run_tests.sh")
     # also get the gt outputs
     reward, test_output = env.runtime._calculate_reward(get_test_output=True)
@@ -193,7 +200,7 @@ def runagent_multiple(
     max_workers: Optional[int] = None,
     llm_name="gpt-4o",
     use_existing: bool = False,
-    skip_existing: bool = False,
+    skip_existing: bool = True,
     temperature: float = 0,
     top_p: float = 0.8,
     presence_penalty: float = 1.5,
@@ -305,7 +312,7 @@ def runagent_multiple(
                 for ds_entry in ds_selected
                 if ds_entry["docker_image"] not in existing_dockers
             ]
-    # assert skip_existing
+    assert skip_existing
     if skip_existing:
         old_jsonl_files_glob = f"{exp_name[:-1]}*"
         for old_jsonl_file in traj_dir_path.glob(old_jsonl_files_glob):
@@ -327,6 +334,13 @@ def runagent_multiple(
     logger.info(
         f"Starting editagent on {len(ds_selected)} Docker images after filtering."
     )
+    # trackfile = open("trackfile.jsonl", "a")
+    # for seleected in ds_selected:
+    #     trackfile.write(
+    #         json.dumps(seleected)
+    #         + "\n"
+    #     )
+    # return
     # with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
     with multiprocessing.Manager() as manager:
         semaphores = {}
