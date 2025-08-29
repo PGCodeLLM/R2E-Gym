@@ -262,6 +262,8 @@ def runagent_multiple(
         return json.dumps(entry["parsed_commit_content"])
     df["parsed_commit_content"] = df.apply(stringify_commit, axis=1)
     print(df)
+    print(df['spec_dict'].apply(type).value_counts())
+    df["spec_dict"] = df["spec_dict"].astype(str)
     ds = Dataset.from_pandas(df)
     # print(ds[0])
     

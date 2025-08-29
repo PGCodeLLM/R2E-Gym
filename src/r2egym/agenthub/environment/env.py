@@ -150,6 +150,7 @@ class RepoEnv(gym.Env):
             obs = str(e)
             error = f"Exception occurred: {obs}"
             self.logger.error(error)
+            raise
         end_time = time.time()
         total_time = end_time - start_time
         return bash_output, error_code, total_time
@@ -176,6 +177,8 @@ class RepoEnv(gym.Env):
         if "finish" in action.function_name.lower():
             self.done = True
         info = {"total_time": total_time}
+        print("SELF OBSERVATION IS")
+        print(self.observation)
         return self.observation, reward, self.done, info
 
     def get_task_instruction(self) -> str:
